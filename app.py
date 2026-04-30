@@ -1,215 +1,284 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
+import matplotlib.pyplot as plt
 import os
-from datetime import datetime
 
 # --- CẤU HÌNH TRANG ---
 st.set_page_config(
-    page_title="VN30 PCA Dashboard | HUB Research",
-    page_icon="📊",
+    page_title="VN30 PCA Analysis | HUB Dashboard",
+    page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# --- CUSTOM CSS ĐỂ LÀM ĐẸP UI ---
+# --- CUSTOM CSS (Nghiêm túc, chuyên nghiệp) ---
 st.markdown("""
     <style>
-    .main {
-        background-color: #f5f7f9;
-    }
+    /* Tổng thể */
+    .main { background-color: #f4f7f9; }
+    .stApp { color: #2c3e50; }
+    
+    /* Metric Cards */
+    div[data-testid="stMetricValue"] { font-size: 28px; color: #1e3d59; font-weight: 700; }
+    div[data-testid="stMetricLabel"] { font-size: 14px; color: #555; }
     .stMetric {
         background-color: #ffffff;
-        padding: 15px;
+        padding: 20px;
         border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        border-left: 5px solid #1e3d59;
     }
-    div[data-testid="stExpander"] {
-        background-color: #ffffff;
-        border-radius: 10px;
-    }
+    
+    /* Footer */
     .footer {
-        position: fixed;
-        left: 0;
-        bottom: 0;
-        width: 100%;
-        background-color: white;
-        color: grey;
-        text-align: center;
-        padding: 10px;
-        font-size: 12px;
-        border-top: 1px solid #eee;
+        position: fixed; left: 0; bottom: 0; width: 100%;
+        background-color: #ffffff; color: #7f8c8d; text-align: center;
+        padding: 8px; font-size: 12px; border-top: 1px solid #dee2e6;
+        z-index: 100;
     }
+    
+    /* Header & Sidebar */
+    h1, h2, h3 { color: #1e3d59; font-family: 'Segoe UI', sans-serif; }
+    .stSidebar { background-color: #f8f9fa; border-right: 1px solid #eee; }
+    
+    /* Tab Styling */
+    .stTabs [data-baseweb="tab-list"] { gap: 24px; }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px; white-space: pre-wrap; background-color: #f8f9fa;
+        border-radius: 4px 4px 0px 0px; gap: 1px; padding-top: 10px;
+    }
+    .stTabs [aria-selected="true"] { background-color: #ffffff; border-bottom: 2px solid #1e3d59 !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- SIDEBAR: THÔNG TIN TÁC GIẢ & CẤU HÌNH ---
+# --- SIDEBAR ---
 with st.sidebar:
-    st.image("https://hub.edu.vn/Images/logo-hub.png", width=150) # Link logo HUB nếu có
-    st.title("⚙️ Cấu hình & Thông tin")
+    st.markdown("<h1 style='text-align: center; color: #1e3d59;'>🏛️</h1>", unsafe_allow_html=True)
+    st.title("Hệ Thống Phân Tích")
     
-    st.info("""
-    **Sinh viên thực hiện:**
-    - Dần Thị Trúc Xinh
-    - Nhóm nghiên cứu HUB
-    """)
+    with st.expander("ℹ️ Thông tin Đồ án", expanded=True):
+        st.markdown(f"""
+        **Sinh viên thực hiện:**
+        - Trần Thị Trúc Xinh 
+        - Đào Việt Anh
+        - Nguyễn Phan Quỳnh Thy 
+        - Nguyễn Thị Nhã Phương
+
+        **Học phần:**
+        Phân tích dữ liệu cho tài chính
+                    
+        **Trường:** ĐH Ngân hàng TP.HCM (HUB)
+        """)
     
     st.divider()
-    st.markdown("### 📁 Quản lý dữ liệu")
-    # Mặc định là "." để đọc ngay tại thư mục gốc nếu bạn không tạo folder data
-    data_path = st.text_input("Đường dẫn thư mục CSV", value=".")
+    st.markdown("### 🛠️ Trạng thái hệ thống")
+    st.success("Máy chủ: **Sẵn sàng**")
     
-    if st.button("🔄 Làm mới dữ liệu"):
+    if st.button("🔄 Làm mới dữ liệu (Clear Cache)", use_container_width=True):
         st.cache_data.clear()
-        st.success("Đã xóa bộ nhớ đệm!")
+        st.rerun()
 
-# --- HÀM XỬ LÝ DỮ LIỆU (MÔ PHỎNG PCA FROM SCRATCH) ---
+# --- HEADER ---
+st.title("📊 PHÂN TÍCH CẤU TRÚC THỊ TRƯỜNG VN30")
+st.caption("Ứng dụng Phân tích Thành phần Chính (PCA) để bóc tách rủi ro hệ thống và mức độ nhạy cảm của rổ chỉ số VN30.")
+
+# --- NẠP VÀ TIỀN XỬ LÝ DỮ LIỆU ---
 @st.cache_data
-def load_and_process_data(folder_path):
-    if not os.path.exists(folder_path):
+def load_and_process_data():
+    all_files = os.listdir('.')
+    stock_files = [f for f in all_files if f.startswith("Dữ liệu Lịch sử") and f.endswith(".csv") and "VN 30" not in f]
+    vn30_file = "Dữ liệu Lịch sử VN 30.csv"
+
+    if not os.path.exists(vn30_file):
         return None, None
-        
-    # Lấy danh sách file, loại bỏ app.py hoặc các file csv không phải dữ liệu nếu có
-    all_files = [f for f in os.listdir(folder_path) if f.endswith('.csv') and f != 'requirements.txt']
-    
-    if not all_files:
-        return None, None
-    
-    prices = pd.DataFrame()
-    for file in all_files:
-        ticker = file.replace('.csv', '')
+
+    def read_clean(file_name, col_name):
         try:
-            # Đọc file, giả định cột đầu là ngày (index)
-            df = pd.read_csv(os.path.join(folder_path, file), index_col=0, parse_dates=True)
-            if 'Close' in df.columns:
-                prices[ticker] = df['Close']
-        except Exception:
-            continue
-    
-    if prices.empty:
+            df = pd.read_csv(file_name)
+            col_date, col_close = 'Ngày', 'Lần cuối'
+            df = df[[col_date, col_close]].copy()
+            df.rename(columns={col_close: col_name, col_date: 'Date'}, inplace=True)
+            df['Date'] = pd.to_datetime(df['Date'], dayfirst=True) # Đảm bảo đọc đúng định dạng ngày Việt Nam
+            s = df[col_name].astype(str).str.strip().str.replace(',', '', regex=False)
+            df[col_name] = pd.to_numeric(s, errors='coerce')
+            return df
+        except:
+            return None
+
+    try:
+        df_merged = read_clean(vn30_file, 'VN30_Index')
+        if df_merged is None: return None, None
+
+        for file in stock_files:
+            ticker = file.replace("Dữ liệu Lịch sử ", "").replace(".csv", "")
+            df_temp = read_clean(file, ticker)
+            if df_temp is not None:
+                df_merged = pd.merge(df_merged, df_temp, on='Date', how='inner')
+
+        df_merged = df_merged.sort_values('Date').set_index('Date').dropna()
+        df_merged_float = df_merged.astype('float64')
+        df_returns = np.log(df_merged_float / df_merged_float.shift(1)).dropna()
+        return df_merged_float, df_returns
+    except:
         return None, None
+
+# --- KHỞI CHẠY LOGIC ---
+df_merged, df_returns = load_and_process_data()
+
+if df_merged is not None:
+    # 1. TÍNH TOÁN PCA (Linear Algebra)
+    vn30_col = 'VN30_Index'
+    X_returns = df_returns.drop(columns=[vn30_col], errors='ignore')
+    
+    # Chuẩn hóa (Z-score)
+    X_scaled = (X_returns - X_returns.mean()) / X_returns.std()
+    
+    # Ma trận hiệp phương sai & Trị riêng
+    cov_matrix = np.cov(X_scaled.to_numpy().T)
+    eigenvalues, eigenvectors = np.linalg.eig(cov_matrix)
+    
+    # Sắp xếp trị riêng
+    sorted_indices = np.argsort(eigenvalues)[::-1]
+    eigenvalues_sorted = np.real(eigenvalues[sorted_indices])
+    eigenvectors_sorted = np.real(eigenvectors[:, sorted_indices])
+    
+    # Tỷ lệ giải thích phương sai
+    explained_variance = (eigenvalues_sorted / np.sum(eigenvalues_sorted)) * 100
+    
+    # Tính toán PC1
+    pc1_eigenvector = eigenvectors_sorted[:, 0]
+    pc1_returns = np.dot(X_scaled, pc1_eigenvector)
+    correlation = pd.Series(pc1_returns).corr(df_returns[vn30_col].reset_index(drop=True))
+    
+    # Đảm bảo PC1 cùng chiều với thị trường
+    if correlation < 0:
+        pc1_returns = -pc1_returns
+        pc1_eigenvector = -pc1_eigenvector
+        correlation = -correlation
+    
+    # Tính lợi suất tích lũy (Cumulative Returns)
+    df_cumulative = np.exp(pd.DataFrame({
+        'PC1_Returns': pc1_returns,
+        'VN30_Returns': df_returns[vn30_col].values
+    }, index=X_returns.index).cumsum()) - 1
+
+    # --- BỐ CỤC TABS ---
+    tab1, tab2, tab3 = st.tabs(["📋 TỔNG QUAN DỮ LIỆU", "🧬 KẾT QUẢ PCA", "🔍 PHÂN TÍCH CHUYÊN SÂU"])
+
+    with tab1:
+        st.subheader("1. Tổng quan Dữ liệu Thị trường")
+        st.markdown("""
+        Dữ liệu được trích xuất từ các tệp CSV lịch sử, đồng bộ hóa theo thời gian và chuyển đổi sang **Log Returns** 
+        để đảm bảo tính phân phối chuẩn trong phân tích tài chính.
+        """)
         
-    prices = prices.ffill().dropna()
-    log_returns = np.log(prices / prices.shift(1)).dropna()
-    return prices, log_returns
+        col_info1, col_info2 = st.columns([1, 1])
+        with col_info1:
+            st.markdown("**📊 Ma trận Giá đóng cửa (Raw Data)**")
+            st.dataframe(df_merged.tail(10), use_container_width=True)
+        with col_info2:
+            st.markdown("**📈 Ma trận Tỷ suất sinh lợi (Log Returns)**")
+            st.dataframe(df_returns.tail(10), use_container_width=True)
+            
+        st.info(f"✅ **Thống kê:** Đã xử lý {len(df_returns.columns)-1} mã cổ phiếu thành phần và {len(df_returns)} phiên giao dịch khớp lệnh.")
 
-def perform_pca_from_scratch(returns_df):
-    # 1. Chuẩn hóa dữ liệu (Standardize)
-    std_returns = (returns_df - returns_df.mean()) / returns_df.std()
-    
-    # 2. Ma trận hiệp phương sai
-    cov_matrix = np.cov(std_returns.T)
-    
-    # 3. Phân rã trị riêng (Eigen Decomposition)
-    eigen_values, eigen_vectors = np.linalg.eig(cov_matrix)
-    
-    # 4. Sắp xếp
-    idx = eigen_values.argsort()[::-1]
-    eigen_values = eigen_values[idx]
-    eigen_vectors = eigen_vectors[:, idx]
-    
-    # Tính Variance Explained (Phần thực để tránh lỗi số phức nếu có nhiễu)
-    explained_variance = np.real(eigen_values) / np.sum(np.real(eigen_values))
-    
-    # PC1 Scores
-    pc1_loadings = np.real(eigen_vectors[:, 0])
-    pc1_scores = std_returns @ pc1_loadings
-    
-    return explained_variance, pc1_loadings, pc1_scores
-
-# --- GIAO DIỆN CHÍNH ---
-st.title("📈 Đồ án: Phân tích Cấu trúc VN30 bằng PCA")
-st.markdown("---")
-
-# Tải dữ liệu
-try:
-    prices, returns = load_and_process_data(data_path)
-    if prices is not None and not prices.empty:
-        # Thực hiện tính toán
-        var_exp, loadings, pc1_scores = perform_pca_from_scratch(returns)
+    with tab2:
+        st.subheader("2. Hiệu năng Thành phần Chính (Principal Components)")
         
-        # --- ROW 1: METRIC CARDS ---
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Số lượng mã cổ phiếu", f"{len(returns.columns)} Mã")
-        col2.metric("Mức độ giải thích PC1", f"{var_exp*100:.2f}%", help="Đại diện cho rủi ro hệ thống")
+        # Row metrics - ĐÃ SỬA LỖI TRUY XUẤT MẢNG
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Giải thích bởi PC1", f"{explained_variance[0]:.2f}%")
+        m2.metric("Tương quan PC1 vs VN30", f"{correlation:.4f}")
         
-        # So sánh với trung bình thị trường (Mô phỏng VN30)
-        market_returns = returns.mean(axis=1)
-        vn30_sim = market_returns.cumsum() 
-        pc1_cum = pc1_scores.cumsum()
+        # SỬA LỖI: Lấy số lượng PC đạt 90% phương sai
+        cum_var = np.cumsum(explained_variance)
+        num_pc_90 = np.argmax(cum_var > 90) + 1
+        m3.metric("Số PC đạt >90% Var", f"{num_pc_90}")
+
+        st.divider()
         
-        # Lấy giá trị tương quan (trích xuất giá trị từ ma trận)
-        correlation = np.corrcoef(pc1_scores, market_returns)
+        # Row plots
+        c_p1, c_p2 = st.columns([1.6, 1])
+        with c_p1:
+            st.markdown("**So sánh Lợi suất Tích lũy: PC1 (Danh mục ảo) vs VN30-Index**")
+            fig, ax = plt.subplots(figsize=(10, 5))
+            ax.plot(df_cumulative.index, df_cumulative['PC1_Returns'], label='PC1 (Artificial Portfolio)', color='#1e3d59', linewidth=2)
+            ax.plot(df_cumulative.index, df_cumulative['VN30_Returns'], label='VN30-Index (Actual)', color='#e74c3c', linestyle='--', linewidth=1.5)
+            ax.set_ylabel('Lợi suất tích lũy', fontsize=10)
+            ax.set_xlabel('Thời gian', fontsize=10)
+            ax.legend(frameon=True)
+            ax.grid(True, linestyle=':', alpha=0.6)
+            st.pyplot(fig)
+            
+        with c_p2:
+            st.markdown("**Bảng giá trị Trị riêng (Eigenvalues)**")
+            df_eigen = pd.DataFrame({
+                'Thành phần': [f'PC{i+1}' for i in range(10)],
+                'Trị riêng': eigenvalues_sorted[:10],
+                '% Giải thích': explained_variance[:10]
+            })
+            st.table(df_eigen.style.format({'Trị riêng': '{:.4f}', '% Giải thích': '{:.2f}%'}))
+            st.caption("Ghi chú: PC1 thường đại diện cho xu hướng chung (Market Risk).")
+
+    with tab3:
+        st.subheader("3. Cấu trúc dẫn dắt & Hệ số tải (Loadings)")
         
-        col3.metric("Tương quan PC1 vs VN30", f"{correlation:.4f}")
-        col4.metric("Trạng thái hệ thống", "Ổn định", delta="Sẵn sàng")
-
-        # --- TABS PHÂN TÍCH ---
-        tab1, tab2, tab3 = st.tabs(["📊 Tổng quan Dữ liệu", "🧬 Kết quả PCA", "🔍 Phân tích Sâu"])
-
-        with tab1:
-            c1, c2 = st.columns(2)
-            with c1:
-                st.subheader("Ma trận Giá đóng cửa (Raw)")
-                st.dataframe(prices.tail(5), use_container_width=True)
-            with c2:
-                st.subheader("Ma trận Tỷ suất sinh lợi (Log)")
-                st.dataframe(returns.tail(5), use_container_width=True)
+        c_i1, c_i2 = st.columns([1, 1.2]) 
+        with c_i1:
+            st.markdown("""
+            ### 🧬 Phân tích Factor Loadings
+            Biểu đồ bên cạnh thể hiện mức độ đóng góp của từng cổ phiếu vào **Thành phần chính số 1 (PC1)**. 
             
-            # Chuẩn hóa giá về gốc 100 để so sánh
-            norm_prices = (prices / prices.iloc * 100)
-            fig_prices = px.line(norm_prices, title="Diễn biến giá VN30 (Quy đổi về gốc 100)", labels={"value": "Chỉ số", "index": "Ngày"})
-            fig_prices.update_layout(showlegend=False)
-            st.plotly_chart(fig_prices, use_container_width=True)
-
-        with tab2:
-            col_a, col_b = st.columns()
+            - **Trọng số dương cao:** Các cổ phiếu mang tính dẫn dắt thị trường (Market Leaders).
+            - **Tính đồng nhất:** Nếu tất cả các mã đều có trọng số cùng dấu, thị trường có tính tương quan hệ thống rất cao.
+            """)
             
-            with col_a:
-                st.subheader("So sánh Lợi suất Tích lũy: PC1 vs VN30-Index")
-                fig_comp = go.Figure()
-                fig_comp.add_trace(go.Scatter(x=pc1_cum.index, y=pc1_cum, name="PC1 (Danh mục PCA)", line=dict(color='firebrick', width=2)))
-                fig_comp.add_trace(go.Scatter(x=vn30_sim.index, y=vn30_sim, name="VN30-Index (Mô phỏng)", line=dict(color='royalblue', width=2, dash='dot')))
-                fig_comp.update_layout(hovermode="x unified", legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01))
-                st.plotly_chart(fig_comp, use_container_width=True)
+            st.markdown("**Top 5 Mã chi phối PC1**")
+            df_weights = pd.DataFrame({'Mã': X_returns.columns, 'Trọng số': pc1_eigenvector})
+            top_5 = df_weights.reindex(df_weights['Trọng số'].abs().sort_values(ascending=False).index).head(5)
+            st.dataframe(top_5.style.background_gradient(cmap='Blues'), use_container_width=True)
             
-            with col_b:
-                st.subheader("Tỷ lệ giải thích phương sai")
-                # Hiển thị 10 PC đầu tiên
-                num_pc = min(10, len(var_exp))
-                exp_df = pd.DataFrame({'PC': [f'PC{i+1}' for i in range(num_pc)], 'Variance': var_exp[:num_pc]})
-                fig_var = px.bar(exp_df, x='PC', y='Variance', text_auto='.2%', color='Variance', color_continuous_scale='Blues')
-                st.plotly_chart(fig_var, use_container_width=True)
+        with c_i2:
+            fig_w, ax_w = plt.subplots(figsize=(8, 10))
+            df_w_sorted = df_weights.sort_values(by='Trọng số')
+            colors = ['#3498db' if x > 0 else '#e74c3c' for x in df_w_sorted['Trọng số']]
+            ax_w.barh(df_w_sorted['Mã'], df_w_sorted['Trọng số'], color=colors, alpha=0.8)
+            ax_w.set_title('VN30 FACTOR LOADINGS (PC1)', fontweight='bold', pad=20)
+            ax_w.axvline(0, color='black', linewidth=0.8)
+            ax_w.grid(axis='x', linestyle='--', alpha=0.4)
+            st.pyplot(fig_w)
 
-        with tab3:
-            st.subheader("Cấu trúc dẫn dắt thị trường (Factor Loadings)")
-            loadings_df = pd.DataFrame({'Ticker': returns.columns, 'Weight': loadings}).sort_values('Weight', ascending=False)
-            
-            fig_loadings = px.bar(loadings_df, x='Weight', y='Ticker', orientation='h', 
-                                 title="Trọng số đóng góp của các cổ phiếu vào PC1",
-                                 color='Weight', color_continuous_scale='RdBu_r', height=800)
-            fig_loadings.update_layout(yaxis={'categoryorder':'total ascending'})
-            st.plotly_chart(fig_loadings, use_container_width=True)
-            
-            with st.expander("💡 Giải thích ý nghĩa tài chính"):
-                st.write("""
-                - **Hệ số tải (Loadings):** Cho biết mức độ nhạy cảm của từng cổ phiếu với biến động chung của thị trường.
-                - **Nhóm dẫn dắt:** Các mã nằm ở phía trên (trọng số cao) là những đầu tàu kéo chỉ số.
-                - **Tính đồng biến:** Nếu tất cả các mã đều có trọng số dương, thị trường đang có tính liên kết cực kỳ chặt chẽ.
-                """)
+        st.divider()
+        
+        # Advanced Q&A
+        st.markdown("### 🔍 Khám phá sâu hơn")
+        questions = [
+            "--- Chọn câu hỏi nghiên cứu ---",
+            "Q1: Tương quan giữa PC1 và VN30-Index nói lên điều gì?",
+            "Q2: Nhóm cổ phiếu nào chi phối rủi ro hệ thống mạnh nhất?",
+            "Q3: Biểu đồ Scree Plot thể hiện điều gì về số lượng nhân tố?"
+        ]
+        selected_q = st.selectbox("Lựa chọn khía cạnh phân tích:", questions)
+        
+        # SỬA LỖI: Logic so sánh chính xác
+        if selected_q == questions[1]:
+            st.success(f"**Kết luận:** Hệ số tương quan đạt {correlation:.4f}. Điều này xác nhận PC1 gần như là 'bản sao' toán học của chỉ số VN30, đại diện cho chuyển động chung của thị trường.")
+        elif selected_q == questions[2]:
+            st.info("Dựa trên biểu đồ Factor Loadings, các mã có trọng số lớn nhất (thường là nhóm Ngân hàng hoặc Bất động sản vốn hóa lớn) là những thực thể dẫn dắt rủi ro hệ thống.")
+        elif selected_q == questions[3]:
+            fig_s, ax_s = plt.subplots(figsize=(10, 4))
+            pcs = [f'PC{i+1}' for i in range(10)]
+            ax_s.bar(pcs, explained_variance[:10], color='#1e3d59', alpha=0.7, label='Phương sai riêng lẻ')
+            ax_s.plot(pcs, np.cumsum(explained_variance[:10]), marker='o', color='#e74c3c', label='Phương sai tích lũy')
+            ax_s.set_title("Scree Plot: Mức độ giải thích của các PC")
+            ax_s.set_ylabel("% Phương sai")
+            ax_s.legend()
+            st.pyplot(fig_s)
+            st.write("Scree Plot giúp xác định 'điểm gãy' (elbow point) để quyết định giữ lại bao nhiêu thành phần chính.")
 
-    else:
-        st.warning("⚠️ Không tìm thấy file dữ liệu CSV. Nếu bạn upload lên GitHub thư mục gốc, hãy để trống ô 'Đường dẫn thư mục CSV' hoặc nhập '.'")
+else:
+    st.error("❌ **Lỗi hệ thống:** Không tìm thấy dữ liệu hoặc cấu trúc file không đúng.")
+    st.warning("Vui lòng kiểm tra các file 'Dữ liệu Lịch sử [Mã CK].csv' và 'Dữ liệu Lịch sử VN 30.csv' trong thư mục gốc.")
 
-except Exception as e:
-    st.error(f"❌ Lỗi hệ thống: {e}")
-    st.info("Mẹo: Đảm bảo các file CSV có cột 'Close' và định dạng ngày tháng đúng.")
-
-# --- FOOTER ---
-st.markdown("""
-    <div class="footer">
-        Đồ án Phân tích dữ liệu Tài chính - Đại học Ngân hàng TP.HCM (HUB) | © 2024
-    </div>
-    """, unsafe_allow_html=True)
+st.markdown('<div class="footer">Đồ án Phân tích dữ liệu Tài chính - HUB | Nhóm 1 | © 2026</div>', unsafe_allow_html=True)
