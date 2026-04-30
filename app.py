@@ -99,7 +99,7 @@ def load_and_process_data():
             col_date, col_close = 'Ngày', 'Lần cuối'
             df = df[[col_date, col_close]].copy()
             df.rename(columns={col_close: col_name, col_date: 'Date'}, inplace=True)
-            df['Date'] = pd.to_datetime(df['Date'], dayfirst=True) # Đảm bảo đọc đúng định dạng ngày Việt Nam
+            df['Date'] = pd.to_datetime(df['Date'], dayfirst=True) 
             s = df[col_name].astype(str).str.strip().str.replace(',', '', regex=False)
             df[col_name] = pd.to_numeric(s, errors='coerce')
             return df
@@ -151,13 +151,11 @@ if df_merged is not None:
     pc1_returns = np.dot(X_scaled, pc1_eigenvector)
     correlation = pd.Series(pc1_returns).corr(df_returns[vn30_col].reset_index(drop=True))
     
-    # Đảm bảo PC1 cùng chiều với thị trường
     if correlation < 0:
         pc1_returns = -pc1_returns
         pc1_eigenvector = -pc1_eigenvector
         correlation = -correlation
     
-    # Tính lợi suất tích lũy (Cumulative Returns)
     df_cumulative = np.exp(pd.DataFrame({
         'PC1_Returns': pc1_returns,
         'VN30_Returns': df_returns[vn30_col].values
@@ -186,19 +184,16 @@ if df_merged is not None:
     with tab2:
         st.subheader("2. Hiệu năng Thành phần Chính (Principal Components)")
         
-        # Row metrics - ĐÃ SỬA LỖI TRUY XUẤT MẢNG
         m1, m2, m3 = st.columns(3)
         m1.metric("Giải thích bởi PC1", f"{explained_variance[0]:.2f}%")
         m2.metric("Tương quan PC1 vs VN30", f"{correlation:.4f}")
         
-        # SỬA LỖI: Lấy số lượng PC đạt 90% phương sai
         cum_var = np.cumsum(explained_variance)
         num_pc_90 = np.argmax(cum_var > 90) + 1
         m3.metric("Số PC đạt >90% Var", f"{num_pc_90}")
 
         st.divider()
         
-        # Row plots
         c_p1, c_p2 = st.columns([1.6, 1])
         with c_p1:
             st.markdown("**So sánh Lợi suất Tích lũy: PC1 (Danh mục ảo) vs VN30-Index**")
@@ -251,31 +246,45 @@ if df_merged is not None:
 
         st.divider()
         
-        # Advanced Q&A
-        st.markdown("### 🔍 Khám phá sâu hơn")
+        # --- 5 CÂU HỎI NGHIÊN CỨU CHI TIẾT ---
+        st.markdown("### 🔍 Khám phá sâu qua các câu hỏi nghiên cứu")
         questions = [
             "--- Chọn câu hỏi nghiên cứu ---",
-            "Q1: Tương quan giữa PC1 và VN30-Index nói lên điều gì?",
-            "Q2: Nhóm cổ phiếu nào chi phối rủi ro hệ thống mạnh nhất?",
-            "Q3: Biểu đồ Scree Plot thể hiện điều gì về số lượng nhân tố?"
+            "Q1: PC1 có thực sự đại diện cho chỉ số VN30 không?",
+            "Q2: Những cổ phiếu nào đóng vai trò 'đầu tàu' rủi ro hệ thống mạnh nhất?",
+            "Q3: Cần bao nhiêu nhân tố để giải thích 90% biến động của thị trường?",
+            "Q4: PC2 và PC3 đại diện cho yếu tố gì (Ngành hay đặc thù)?",
+            "Q5: Ứng dụng kết quả PCA này vào quản trị danh mục như thế nào?"
         ]
-        selected_q = st.selectbox("Lựa chọn khía cạnh phân tích:", questions)
+        selected_q = st.selectbox("Lựa chọn khía cạnh cần giải trình:", questions)
         
-        # SỬA LỖI: Logic so sánh chính xác
         if selected_q == questions[1]:
-            st.success(f"**Kết luận:** Hệ số tương quan đạt {correlation:.4f}. Điều này xác nhận PC1 gần như là 'bản sao' toán học của chỉ số VN30, đại diện cho chuyển động chung của thị trường.")
+            st.success(f"**Kết luận:** Hệ số tương quan đạt {correlation:.4f}. Vì PC1 giải thích đến {explained_variance[0]:.2f}% phương sai và có tương quan cực cao với VN30, ta có thể khẳng định PC1 chính là 'Nhân tố thị trường' (Market Factor).")
+        
         elif selected_q == questions[2]:
-            st.info("Dựa trên biểu đồ Factor Loadings, các mã có trọng số lớn nhất (thường là nhóm Ngân hàng hoặc Bất động sản vốn hóa lớn) là những thực thể dẫn dắt rủi ro hệ thống.")
+            st.info(f"**Phân tích:** Các cổ phiếu đứng đầu bảng trọng số như **{top_5['Mã'].iloc[0]}** và **{top_5['Mã'].iloc[1]}** là những mã nhạy cảm nhất. Khi thị trường chung biến động, các mã này sẽ phản ứng mạnh nhất, đóng vai trò dẫn dắt rủi ro hệ thống.")
+        
         elif selected_q == questions[3]:
+            st.warning(f"**Phân tích:** Theo biểu đồ Scree Plot, chúng ta cần tổng cộng **{num_pc_90}** thành phần chính để vượt ngưỡng 90% phương sai. Điều này cho thấy rổ VN30 có tính tập trung cao.")
             fig_s, ax_s = plt.subplots(figsize=(10, 4))
-            pcs = [f'PC{i+1}' for i in range(10)]
-            ax_s.bar(pcs, explained_variance[:10], color='#1e3d59', alpha=0.7, label='Phương sai riêng lẻ')
-            ax_s.plot(pcs, np.cumsum(explained_variance[:10]), marker='o', color='#e74c3c', label='Phương sai tích lũy')
+            pcs_labels = [f'PC{i+1}' for i in range(10)]
+            ax_s.bar(pcs_labels, explained_variance[:10], color='#1e3d59', alpha=0.7, label='Phương sai riêng lẻ')
+            ax_s.plot(pcs_labels, np.cumsum(explained_variance[:10]), marker='o', color='#e74c3c', label='Phương sai tích lũy')
             ax_s.set_title("Scree Plot: Mức độ giải thích của các PC")
             ax_s.set_ylabel("% Phương sai")
             ax_s.legend()
             st.pyplot(fig_s)
-            st.write("Scree Plot giúp xác định 'điểm gãy' (elbow point) để quyết định giữ lại bao nhiêu thành phần chính.")
+
+        elif selected_q == questions[4]:
+            st.write(f"**Phân tích:** PC1 đã chiếm đa số phương sai. PC2 ({explained_variance[1]:.2f}%) và PC3 ({explained_variance[2]:.2f}%) thường đại diện cho sự đối lập giữa các nhóm ngành (ví dụ: dòng tiền rút từ Bất động sản sang Ngân hàng) hoặc các cú sốc chỉ ảnh hưởng đến một nhóm cổ phiếu cụ thể.")
+
+        elif selected_q == questions[5]:
+            st.markdown("""
+            **Ứng dụng thực tiễn:**
+            1. **Xây dựng danh mục tối ưu:** Tập trung vào các mã có Loading PC1 thấp nếu muốn giảm thiểu rủi ro thị trường.
+            2. **Phòng vệ rủi ro (Hedging):** Sử dụng PC1 như một chỉ báo sớm để điều chỉnh tỷ trọng danh mục trước các biến động lớn.
+            3. **Đa dạng hóa:** PCA giúp nhận diện các cổ phiếu không đi cùng hướng với đám đông (Loadings thấp hoặc âm).
+            """)
 
 else:
     st.error("❌ **Lỗi hệ thống:** Không tìm thấy dữ liệu hoặc cấu trúc file không đúng.")
