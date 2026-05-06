@@ -361,18 +361,52 @@ if df_merged is not None:
         elif selected_q == questions[3]:
             st.warning(f"**Phân tích:** Theo biểu đồ Scree Plot bên dưới, chúng ta cần tổng cộng **{num_pc_90}** thành phần chính để vượt ngưỡng 90% phương sai. Điều này cho thấy rổ VN30 có tính tập trung cao.")
             
-            fig_s, ax_s = plt.subplots(figsize=(14, 5)) # Nới rộng figure size
+            # --- VẼ BIỂU ĐỒ ---
+            fig_s, ax_s = plt.subplots(figsize=(14, 6)) # Tăng chút chiều cao để nhãn không bị cắt
             pcs_labels = [f'PC{i+1}' for i in range(n_features)] # Full 30 điểm
+            cum_var_array = np.cumsum(explained_variance[:n_features])
+            
+            # Vẽ cột và đường
             ax_s.bar(pcs_labels, explained_variance[:n_features], color='#829AB1', alpha=0.8, label='Phương sai riêng lẻ')
-            ax_s.plot(pcs_labels, np.cumsum(explained_variance[:n_features]), marker='o', color='#E53E3E', label='Phương sai tích lũy')
+            ax_s.plot(pcs_labels, cum_var_array, marker='o', color='#E53E3E', label='Phương sai tích lũy')
+            
+            # Thêm chú thích % ngay trên từng điểm
+            for i, val in enumerate(cum_var_array):
+                ax_s.annotate(f'{val:.1f}%', 
+                              (i, val), 
+                              textcoords="offset points", 
+                              xytext=(0, 8), # Đẩy chữ lên trên điểm một chút
+                              ha='center', 
+                              fontsize=9, 
+                              color='#C53030',
+                              rotation=45) # Xoay 45 độ để các số không bị đè lên nhau
+                              
             ax_s.set_title("Scree Plot: Trực quan toàn bộ Thành phần chính (PC)", color='#1A365D', fontweight='bold')
             ax_s.set_ylabel("% Phương sai", color='#4A5568')
-            ax_s.tick_params(axis='x', rotation=90) # Xoay nhãn để không bị chật
-            ax_s.legend()
+            ax_s.tick_params(axis='x', rotation=90) 
+            
+            # Căn chỉnh để nhãn text trên cùng không bị lẹm viền
+            ax_s.set_ylim(0, 115) 
+            ax_s.legend(loc='upper left')
             
             fig_s.patch.set_facecolor('#F0F4F8')
             ax_s.set_facecolor('#FFFFFF')
             st.pyplot(fig_s)
+
+            # --- THÊM BẢNG TỔNG HỢP NGAY DƯỚI BIỂU ĐỒ ---
+            st.markdown("#### 📊 Bảng tổng hợp Tỷ lệ giải thích Phương sai")
+            df_scree = pd.DataFrame({
+                'Thành phần chính (PC)': pcs_labels,
+                'Phương sai riêng lẻ (%)': explained_variance[:n_features],
+                'Phương sai tích lũy (%)': cum_var_array
+            })
+            
+            # In bảng ra, dùng st.dataframe để có thanh cuộn mượt mà
+            st.dataframe(df_scree.style.format({
+                'Phương sai riêng lẻ (%)': '{:.2f}%',
+                'Phương sai tích lũy (%)': '{:.2f}%'
+            }).background_gradient(subset=['Phương sai tích lũy (%)'], cmap='Reds'), 
+            use_container_width=True)
 
         # --- LỜI GIẢI Q4 ---
         elif selected_q == questions[4]:
