@@ -65,7 +65,7 @@ st.markdown("""
 with st.sidebar:
     # Thêm Logo trường (Thay thế bằng text nếu file ảnh không tồn tại để tránh lỗi crash)
     try:
-        st.image("logo-hub.png", use_container_width=True)
+        st.image("logo.png", use_container_width=True)
     except:
         st.markdown("<h1 style='text-align: center; color: #1A365D;'>🏦 HUB</h1>", unsafe_allow_html=True)
         
