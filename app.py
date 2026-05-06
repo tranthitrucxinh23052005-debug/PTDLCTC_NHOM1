@@ -149,17 +149,33 @@ if df_merged is not None:
     # Tính toán PC1
     pc1_eigenvector = eigenvectors_sorted[:, 0]
     pc1_returns = np.dot(X_scaled, pc1_eigenvector)
-    correlation = pd.Series(pc1_returns).corr(df_returns[vn30_col].reset_index(drop=True))
+    vn30_returns = df_returns[vn30_col].values
+    
+    correlation = pd.Series(pc1_returns).corr(pd.Series(vn30_returns))
     
     if correlation < 0:
         pc1_returns = -pc1_returns
         pc1_eigenvector = -pc1_eigenvector
         correlation = -correlation
     
-    df_cumulative = np.exp(pd.DataFrame({
+    # --- BƯỚC SỬA LỖI ĐỒ THỊ BỊ "NỔ" ---
+    # Đưa vào DataFrame tạm để đo lường biến động
+    df_temp = pd.DataFrame({
         'PC1_Returns': pc1_returns,
-        'VN30_Returns': df_returns[vn30_col].values
-    }, index=X_returns.index).cumsum()) - 1
+        'VN30_Returns': vn30_returns
+    }, index=X_returns.index)
+
+    # Đồng bộ hóa biên độ dao động (Rescale Volatility)
+    pc1_volatility = df_temp['PC1_Returns'].std()
+    vn30_volatility = df_temp['VN30_Returns'].std()
+    
+    df_temp['PC1_Returns_Adjusted'] = df_temp['PC1_Returns'] * (vn30_volatility / pc1_volatility)
+
+    # Tính lợi suất tích lũy chính xác
+    df_cumulative = pd.DataFrame(index=X_returns.index)
+    df_cumulative['PC1_Returns'] = np.exp(df_temp['PC1_Returns_Adjusted'].cumsum()) - 1
+    df_cumulative['VN30_Returns'] = np.exp(df_temp['VN30_Returns'].cumsum()) - 1
+    # -----------------------------------
 
     # --- BỐ CỤC TABS ---
     tab1, tab2, tab3 = st.tabs(["📋 TỔNG QUAN DỮ LIỆU", "🧬 KẾT QUẢ PCA", "🔍 PHÂN TÍCH CHUYÊN SÂU"])
